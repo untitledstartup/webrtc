@@ -8,6 +8,10 @@ import (
 	"net"
 	"os"
 	"time"
+	"net/http"
+	"bytes"
+	"encoding/json"
+	"io/ioutil"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
@@ -20,6 +24,17 @@ type udpConn struct {
 	conn        *net.UDPConn
 	port        int
 	payloadType uint8
+}
+
+type ChimeTurnCredentialsRequest struct {
+	MeetingId string `json:"meetingId"`
+}
+
+type ChimeTurnCredentialsResponse struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Ttl string `json:"ttl"`
+	Uris []string `json:"uris"`
 }
 
 func main() {
@@ -55,19 +70,43 @@ func main() {
 	// Create the API object with the MediaEngine
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i))
 
+	// Retrieve the TURN credentials from amazon
+	meetingId := "758dd920-5a82-43e7-b9d5-74b7a1f20706"
+	chimeAuthToken := "_aws_wt_session=MzkzNjlhY2EtYmMwYi1iOWQ1LTcwZmQtNDNmYzEzMzY4ZmIwOmNhN2RkYTllLTg0YzktNDkyYS1iZjg2LTMyYjE5NjIyM2RmOQ"
+	turnServerUrl := "https://ccp.cp.ue1.app.chime.aws/v2/turn_sessions"
 
-	// TODO retrieve the TURN credentials from amazon
-	// see https://github.com/aws/amazon-chime-sdk-js/blob/4aa8c569ca24ace9ef4d89fc99ec6ca4d645da0a/src/task/ReceiveTURNCredentialsTask.ts#L105
-	username := "aaa"
-	credentials := "bbb"
+	jsonChimeTurnCredentialsRequestBody := &ChimeTurnCredentialsRequest{
+		MeetingId: meetingId,
+	}
+
+	jsonBody, _ := json.Marshal(jsonChimeTurnCredentialsRequestBody)
+
+	request, error := http.NewRequest("POST", turnServerUrl, bytes.NewBuffer(jsonBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Chime-Auth-Token", chimeAuthToken)
+
+	client := &http.Client{}
+	response, error := client.Do(request)
+	if error != nil {
+		panic(error)
+	}
+	defer response.Body.Close()
+
+	fmt.Println("response Status:", response.Status)
+	fmt.Println("response Headers:", response.Header)
+	body, _ := ioutil.ReadAll(response.Body)
+	fmt.Println("response Body:", string(body))
+
+	var chimeResponse ChimeTurnCredentialsResponse
+	json.Unmarshal([]byte(body), &chimeResponse)
 
 	// Prepare the configuration
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
-				URLs:       []string{"turn:ice.m2.ue1.app.chime.aws:3478?transport=udp", "turns:ice.m2.ue1.app.chime.aws:443?transport=tcp"},
-				Username:   username,
-				Credential: credentials,
+				URLs:       chimeResponse.Uris,
+				Username:   chimeResponse.Username,
+				Credential: chimeResponse.Password,
 			},
 		},
 	}

@@ -4,14 +4,14 @@
 package main
 
 import (
-	"fmt"
-	"net"
-	"os"
-	"time"
-	"net/http"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"net"
+	"net/http"
+	"os"
+	"time"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
@@ -31,10 +31,10 @@ type ChimeTurnCredentialsRequest struct {
 }
 
 type ChimeTurnCredentialsResponse struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Ttl string `json:"ttl"`
-	Uris []string `json:"uris"`
+	Username string   `json:"username"`
+	Password string   `json:"password"`
+	Ttl      string   `json:"ttl"`
+	Uris     []string `json:"uris"`
 }
 
 func main() {
@@ -71,8 +71,8 @@ func main() {
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i))
 
 	// Retrieve the TURN credentials from amazon
-	meetingId := "758dd920-5a82-43e7-b9d5-74b7a1f20706"
-	chimeAuthToken := "_aws_wt_session=MzkzNjlhY2EtYmMwYi1iOWQ1LTcwZmQtNDNmYzEzMzY4ZmIwOmNhN2RkYTllLTg0YzktNDkyYS1iZjg2LTMyYjE5NjIyM2RmOQ"
+	meetingId := "802b1df5-3c5f-4a30-abc5-e107c5b80706"
+	chimeAuthToken := "_aws_wt_session=ZTUwMTA2YWUtMzdmZS01YjgwLTg3YWMtNmQ0MzEzYWEzYzZiOjFjZTQ5NTg0LWJiMmQtNDIyYy1hN2YxLWNlZDJlNGVjZGM0Yg"
 	turnServerUrl := "https://ccp.cp.ue1.app.chime.aws/v2/turn_sessions"
 
 	jsonChimeTurnCredentialsRequestBody := &ChimeTurnCredentialsRequest{
@@ -104,11 +104,13 @@ func main() {
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
-				URLs:       chimeResponse.Uris,
-				Username:   chimeResponse.Username,
-				Credential: chimeResponse.Password,
+				URLs:           chimeResponse.Uris, //[]string{"turn:ice.m1.ue1.app.chime.aws:3478", "turns:ice.m1.ue1.app.chime.aws:443"}, //chimeResponse.Uris,
+				Username:       chimeResponse.Username,
+				Credential:     chimeResponse.Password,
+				CredentialType: webrtc.ICECredentialTypePassword,
 			},
 		},
+		// ICETransportPolicy: webrtc.ICETransportPolicyRelay,
 	}
 
 	// Create a new RTCPeerConnection
@@ -121,6 +123,12 @@ func main() {
 			fmt.Printf("cannot close peerConnection: %v\n", cErr)
 		}
 	}()
+
+	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		if candidate != nil {
+			fmt.Println(candidate.String())
+		}
+	})
 
 	// Allow us to receive 1 audio track, and 1 video track
 	if _, err = peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio); err != nil {
